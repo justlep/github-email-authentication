@@ -1,0 +1,64 @@
+{
+  "name": "github-email-authentication",
+  "version": "1.0.0",
+  "description": "User authentication based on verified, primary Github account email addresses using Github OAuth",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --reporter spec test/*.spec.js",
+    "test-manually": "node test/manual-test-server"
+  },
+  "engines": {
+    "node": ">= 8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justlep/github-email-authentication.git"
+  },
+  "keywords": [
+    "github",
+    "oauth",
+    "authentication",
+    "primary",
+    "verified",
+    "email"
+  ],
+  "author": "Lennart Pegel",
+  "license": "MIT",
+  "homepage": "https://github.com/justlep/github-email-authentication#readme",
+  "dependencies": {
+    "axios": "^0.18.0",
+    "keygrip-autorotate": "^1.0.0"
+  },
+  "devDependencies": {
+    "express": "^4.16.4",
+    "mocha": "^5.2.0"
+  },
+  "eslint": {
+    "env": {
+      "es6": true,
+      "node": true
+    },
+    "extends": "eslint:recommended",
+    "parserOptions": {
+      "ecmaVersion": 2017
+    },
+    "rules": {
+      "indent": [
+        "error",
+        4
+      ],
+      "linebreak-style": [
+        "error",
+        "unix"
+      ],
+      "quotes": [
+        "error",
+        "single"
+      ],
+      "semi": [
+        "error",
+        "always"
+      ]
+    }
+  }
+}
