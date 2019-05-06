@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha --reporter spec test/*.spec.js",
-    "test-manually": "node test/manual-test-server"
+    "test-manually": "node test/manual-test-server",
+    "snyk-protect": "snyk protect",
+    "prepublish": "npm run snyk-protect"
   },
   "engines": {
     "node": ">= 8"
@@ -27,7 +29,8 @@
   "homepage": "https://github.com/justlep/github-email-authentication#readme",
   "dependencies": {
     "axios": "^0.18.0",
-    "keygrip-autorotate": "^1.0.0"
+    "keygrip-autorotate": "^1.0.0",
+    "snyk": "^1.161.1"
   },
   "devDependencies": {
     "express": "^4.16.4",
@@ -60,5 +63,6 @@
         "always"
       ]
     }
-  }
+  },
+  "snyk": true
 }
