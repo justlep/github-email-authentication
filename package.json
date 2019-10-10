@@ -1,6 +1,6 @@
 {
   "name": "github-email-authentication",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "User authentication based on verified, primary Github account email addresses using Github OAuth",
   "main": "index.js",
   "scripts": {
@@ -26,7 +26,7 @@
   "license": "MIT",
   "homepage": "https://github.com/justlep/github-email-authentication#readme",
   "dependencies": {
-    "axios": "^0.18.0",
+    "axios": "^0.18.1",
     "keygrip-autorotate": "^1.0.0"
   },
   "devDependencies": {
