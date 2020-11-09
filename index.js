@@ -17,7 +17,7 @@ const ANY_EMAIL_PLACEHOLDER = '@' + crypto.randomBytes(10).toString('hex');
  * @return {string}
  */
 function encodeSafeBase64(s) {
-    return new Buffer(s, 'utf8').toString('base64').replace(/[/+=]/g, s => s === '/' ? '_' : s === '+' ? '-' : '');
+    return Buffer.from(s, 'utf8').toString('base64').replace(/[/+=]/g, s => s === '/' ? '_' : s === '+' ? '-' : '');
 }
 
 /**
@@ -125,7 +125,7 @@ function GithubEmailAuthentication(opts) {
     assert(onError && typeof onError === 'function', 'Invalid onError callback');
     assert(onSuccess && typeof onSuccess === 'function', 'Invalid onSuccess callback');
     assert(!isNaN(maxLoginProcessDuration) && maxLoginProcessDuration > 1000, 'Invalid maxLoginProcessDuration');
-    assert(Array.isArray(scopes), 'Invalid scopes: %s', typeof scopes);
+    assert(Array.isArray(scopes), 'Invalid scopes array');
 
     const signer = new KeygripAutorotate({
         totalSecrets: 5,
