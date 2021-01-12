@@ -1,7 +1,7 @@
 const assert = require('assert');
 const crypto = require('crypto');
 const url = require('url');
-const axios = require('axios');
+const https = require('https');
 const KeygripAutorotate = require('keygrip-autorotate');
 
 const STATE_RANDOM_BYTES = 5;
@@ -48,31 +48,81 @@ function createSignedStateForPayload(payload, signer) {
  * @return {string|null} the payload from the signed state IF the state could be verified, otherwise null
  */
 function getPayloadFromStateIfVerified(state, signer) {
+    if (!state || typeof state !== 'string' || state.length < MIN_ACCEPTED_STATE_LENGTH || state.length > MAX_ACCEPTED_STATE_LENGTH) {
+        return null;
+    }
     let payload = null;
-    if (state && typeof state === 'string' && state.length >= MIN_ACCEPTED_STATE_LENGTH && state.length < MAX_ACCEPTED_STATE_LENGTH) {
-        try {
-            let lengthDividerIndex = state.indexOf('_');
-            if (lengthDividerIndex > 3) {
-                // encoded payload length can never be 36^4+
-                return null;
-            }
-            let encodedPayloadLength = parseInt(state.substr(0, lengthDividerIndex), 36),
-                encodedPayload = state.substr(lengthDividerIndex + 1 + STATE_RANDOM_BYTES_STRING_LENGTH, encodedPayloadLength),
-                signedTextLength = lengthDividerIndex + 1 + STATE_RANDOM_BYTES_STRING_LENGTH + encodedPayloadLength,
-                signedText = state.substr(0, signedTextLength),
-                signature = state.substr(signedTextLength);
-
-            // assert.equal(signedText.length + signature.length, state.length);
-
-            if (signer.verify(signedText, signature)) {
-                payload = decodeUrlSafeBase64(encodedPayload);
-            }
-        } catch (err) {
-            // nothing
+    try {
+        let lengthDividerIndex = state.indexOf('_');
+        if (lengthDividerIndex > 3) {
+            // encoded payload length can never be 36^4+
+            return null;
         }
+        let encodedPayloadLength = parseInt(state.substr(0, lengthDividerIndex), 36),
+            encodedPayload = state.substr(lengthDividerIndex + 1 + STATE_RANDOM_BYTES_STRING_LENGTH, encodedPayloadLength),
+            signedTextLength = lengthDividerIndex + 1 + STATE_RANDOM_BYTES_STRING_LENGTH + encodedPayloadLength,
+            signedText = state.substr(0, signedTextLength),
+            signature = state.substr(signedTextLength);
+
+        // assert.equal(signedText.length + signature.length, state.length);
+
+        if (signer.verify(signedText, signature)) {
+            payload = decodeUrlSafeBase64(encodedPayload);
+        }
+    } catch (err) {
+        // nothing
     }
     return payload;
 }
+
+const DEFAULT_HEADERS = {
+    'User-Agent': 'node.js',
+    Accept: 'application/json'
+};
+
+function getGithubJson(httpsUrl, authToken, maxContentLength = 2000, timeout = 15000) {
+    const headers = authToken ? Object.assign(DEFAULT_HEADERS, {Authorization: `token ${authToken}`}) : DEFAULT_HEADERS;
+    const {hostname, port = 443, path} = url.parse(httpsUrl)
+
+    return new Promise((resolve, reject) => {
+        let data = '';
+
+        https.get({
+            hostname,
+            port,
+            path,
+            headers,
+            timeout
+        }, res => {
+            if (res.statusCode !== 200) {
+                return reject('Github API responded with HTTP ' + res.statusCode);
+            }
+            // console.log('headers:', res.headers);
+
+            res.on('data', d => data += d);
+
+            res.on('end', () => {
+                let json,
+                    parsingError;
+                try {
+                    json = JSON.parse(data);
+                } catch (err) {
+                    parsingError = err
+                }
+                if (json) {
+                    resolve(json)
+                } else {
+                    reject(parsingError || 'Invalid JSON in Github response');
+                }
+            });
+
+        }).on('error', (e) => {
+            // console.error(e);
+            reject = reject && void reject(e);
+        });
+    });
+}
+
 
 /**
  * @param {Object} opts
@@ -158,9 +208,7 @@ function GithubEmailAuthentication(opts) {
         let trimmedEmail = (typeof emailAddress === 'string') ? emailAddress.trim() : null;
 
         if (!trimmedEmail || !trimmedEmail.includes('@')) {
-            if (logEnabled) {
-                console.error('Invalid email address for GithubEmailAuthentication.startLoginForEmail(): "%s"', emailAddress);
-            }
+            logEnabled && console.error('Invalid email address for GithubEmailAuthentication.startLoginForEmail(): "%s"', emailAddress);
             return setImmediate(onError, 'Bad email address', res, null);
         }
 
@@ -193,23 +241,13 @@ function GithubEmailAuthentication(opts) {
         }
 
         try {
-            let resJson = await axios.get('https://github.com/login/oauth/access_token', {
-                    params: {
-                        client_id: githubClientId,
-                        client_secret: githubClientSecret,
-                        code,
-                        state
-                    },
-                    headers: {
-                        Accept: 'application/json'
-                    },
-                    timeout: 15000,
-                    responseType: 'json',
-                    maxContentLength: 2000,
-                    maxRedirects: 0
-                });
+            const apiUrl = 'https://github.com/login/oauth/access_token?' +
+                           `client_id=${encodeURIComponent(githubClientId)}&client_secret=${encodeURIComponent(githubClientSecret)}` +
+                           `&code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
 
-            accessToken = resJson && resJson.data && resJson.data['access_token'];
+            let resJson = await getGithubJson(apiUrl, null);
+
+            accessToken = resJson && resJson['access_token'];
 
         } catch (err) {
             logEnabled && console.error('Github API call for access token failed with error: %s', err);
@@ -220,16 +258,8 @@ function GithubEmailAuthentication(opts) {
         }
 
         try {
-            let resJson = await axios.get('https://api.github.com/user/emails', {
-                    headers: {
-                        Authorization: `token ${accessToken}`,
-                        'user-agent': 'node.js'
-                    },
-                    responseType: 'json',
-                    maxRedirects: 0,
-                    timeout: 15000
-                }),
-                emailsArray = resJson && resJson.data;
+            let resJson = await getGithubJson('https://api.github.com/user/emails', accessToken, 20000),
+                emailsArray = resJson;
 
             /**
              * @type {Object}
