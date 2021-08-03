@@ -1,6 +1,6 @@
 const assert = require('assert');
 const crypto = require('crypto');
-const url = require('url');
+const {URL, URLSearchParams} = require('url');
 const https = require('https');
 const KeygripAutorotate = require('keygrip-autorotate');
 
@@ -80,17 +80,28 @@ const DEFAULT_HEADERS = {
     Accept: 'application/json'
 };
 
-function getGithubJson(httpsUrl, authToken, maxContentLength = 2000, timeout = 15000) {
+/**
+ * @param {URL} url - some Github url; must be https:
+ * @param {?string} authToken
+ * @param {number} [maxContentLength=2000]
+ * @param {number} [timeout=15000]
+ * @return {Promise<Object>}
+ * @private
+ */
+function _fetchGithubJson(url, authToken, maxContentLength = 2000, timeout = 15000) {
     const headers = authToken ? Object.assign(DEFAULT_HEADERS, {Authorization: `token ${authToken}`}) : DEFAULT_HEADERS;
-    const {hostname, port = 443, path} = url.parse(httpsUrl)
+
+    if (url.protocol !== 'https:') {
+        return Promise.reject('Expected https url, but got ' + url.protocol);
+    }
 
     return new Promise((resolve, reject) => {
         let data = '';
 
         https.get({
-            hostname,
-            port,
-            path,
+            hostname: url.hostname,
+            port: url.port || 443,
+            path: url.pathname + url.search,
             headers,
             timeout
         }, res => {
@@ -126,7 +137,7 @@ function getGithubJson(httpsUrl, authToken, maxContentLength = 2000, timeout = 1
 
 /**
  * @param {Object} opts
- * @param {Router|App} opts.appOrRouter - some Express app or router
+ * @param {Router|Express.Application} opts.appOrRouter - some Express app or router
  * @param {string} opts.routableCallbackUri - e.g. '/githubCallback', this route will be added to the given `appOrRouter`
  *                                            to receive authorization codes
  * @param {string} opts.absoluteCallbackUrl - the absolute URL for the redirect from Github OAuth login, so basically
@@ -224,28 +235,41 @@ function GithubEmailAuthentication(opts) {
      */
     this.destroy = () => signer.destroy();
 
-    appOrRouter.get(opts.routableCallbackUri, async (githubCallbackRequest, res, next) => {
-        let query = url.parse(githubCallbackRequest.url, true).query,
-            code = query.code || '',
-            state = query.state || '',
-            emailFromVerifiedState = code && getPayloadFromStateIfVerified(state, signer),
-            loggedInPrimaryVerifiedEmail,
-            accessToken;
+    appOrRouter.get(opts.routableCallbackUri, async (cbRequestFromGithub, res, next) => {
+        /** @type {?string|undefined} */
+        let code, state;
+
+        const queryParamsIndex = cbRequestFromGithub.url.indexOf('?');
+        if (queryParamsIndex >= 0) {
+            try {
+                // let's not rely on Express query parser being enabled, instead parse the query string manually
+                const searchParams = new URLSearchParams(cbRequestFromGithub.url.substr(queryParamsIndex));
+                code = searchParams.get('code');
+                state = searchParams.get('state');
+            } catch (err) {
+                return setImmediate(onError, 'Failed to parse github callback url', res, next);
+            }
+        }
 
         if (!code) {
             return setImmediate(onError, 'Invalid authorization code received', res, next);
         }
 
+        const emailFromVerifiedState = getPayloadFromStateIfVerified(state, signer);
         if (!emailFromVerifiedState) {
             return setImmediate(onError, 'Invalid or expired state for authentication', res, next);
         }
 
-        try {
-            const apiUrl = 'https://github.com/login/oauth/access_token?' +
-                           `client_id=${encodeURIComponent(githubClientId)}&client_secret=${encodeURIComponent(githubClientSecret)}` +
-                           `&code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
+        let accessToken,
+            loggedInPrimaryVerifiedEmail;
 
-            let resJson = await getGithubJson(apiUrl, null);
+        try {
+            const apiUrl = new URL('https://github.com/login/oauth/access_token');
+            apiUrl.searchParams.set('client_id', githubClientId);
+            apiUrl.searchParams.set('client_secret', githubClientSecret);
+            apiUrl.searchParams.set('code', code);
+            apiUrl.searchParams.set('state', state);
+            const resJson = await _fetchGithubJson(apiUrl, null);
 
             accessToken = resJson && resJson['access_token'];
 
@@ -258,8 +282,7 @@ function GithubEmailAuthentication(opts) {
         }
 
         try {
-            let resJson = await getGithubJson('https://api.github.com/user/emails', accessToken, 20000),
-                emailsArray = resJson;
+            const emailsArray = await _fetchGithubJson(new URL('https://api.github.com/user/emails'), accessToken, 20000);
 
             /**
              * @type {Object}
@@ -268,7 +291,7 @@ function GithubEmailAuthentication(opts) {
              * @property {boolean} verified
              * @property {string} visibility
              */
-            let acceptableEmailObject = emailsArray && emailsArray.find(e => e.verified && e.primary);
+            const acceptableEmailObject = emailsArray && emailsArray.find(e => e.verified && e.primary);
 
             loggedInPrimaryVerifiedEmail = acceptableEmailObject && acceptableEmailObject.email;
 
@@ -284,12 +307,12 @@ function GithubEmailAuthentication(opts) {
             logEnabled && console.warn('Expected Github account email "%s", but found primary, verified address "%s"',
                                          emailFromVerifiedState, loggedInPrimaryVerifiedEmail);
 
-            return setImmediate(onError, 'Expected email address is not primary, verified address of the logged in Github account', res, next);
+            return setImmediate(onError, 'Expected email address is not primary & verified address of the logged in Github account', res, next);
         }
 
-        let tokenToExpose = exposeAccessToken ? accessToken : null;
+        const tokenToExpose = exposeAccessToken ? accessToken : null;
 
-        setImmediate(onSuccess, loggedInPrimaryVerifiedEmail, tokenToExpose, githubCallbackRequest, res, next);
+        setImmediate(onSuccess, loggedInPrimaryVerifiedEmail, tokenToExpose, cbRequestFromGithub, res, next);
     });
 
     Object.freeze(this);
@@ -299,7 +322,7 @@ function GithubEmailAuthentication(opts) {
  * @callback GithubEmailAuthentication_ErrorHandler
  * @param {string} errorMessage
  * @param {Response} response
- * @param {function?} next
+ * @param {function|NextFunction} [next]
  */
 
 /**
@@ -308,7 +331,7 @@ function GithubEmailAuthentication(opts) {
  * @param {string} accessToken
  * @param {Request} request
  * @param {Response} response
- * @param {function} next
+ * @param {function|NextFunction} [next]
  */
 
 
