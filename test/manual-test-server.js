@@ -1,26 +1,43 @@
 const express = require('express');
 const url = require('url');
+const {resolve} = require('path');
 const app = express();
+const {writeFileSync} = require('fs');
 const {GithubEmailAuthentication} = require('..');
 
 const PORT = 9099;
-const CLIENT_ID = '__PUT_CLIENT_ID_HERE__';
-const CLIENT_SECRET = '__PUT_CLIENT_SECRET_HERE__';
+
+const CREDENTIALS_FILE_PATH = resolve(__dirname, 'test-credentials.json');
+let credentials = {githubClientId: '', githubClientSecret: ''};
+
+try {
+    credentials = require(CREDENTIALS_FILE_PATH);
+} catch (err) {
+    writeFileSync(CREDENTIALS_FILE_PATH, JSON.stringify(credentials, null, 2));
+}
+
+const {githubClientId, githubClientSecret} = credentials;
+if (!githubClientId || !githubClientSecret) {
+    console.warn('Missing Github test credentials in %s', CREDENTIALS_FILE_PATH);
+    process.exit(1);
+}
+
+const _getResponseHtml = s => `<html><body><p>${s}</p><a href="/">Go back</a></body></html>`;
 
 const githubEmailAuth = new GithubEmailAuthentication({
     appOrRouter: app,
     routableCallbackUri: '/loginCallback',
     absoluteCallbackUrl: `http://localhost:${PORT}/loginCallback`,
-    githubClientId: CLIENT_ID,
-    githubClientSecret: CLIENT_SECRET,
+    githubClientId,
+    githubClientSecret,
     exposeAccessToken: false,
-    onSuccess: (validatedPrimaryEmail, accessToken, req, res, next) => {
+    onSuccess: (validatedPrimaryEmail, accessToken, req, res) => {
         console.log('Logged in with primary email "%s", token is %s', validatedPrimaryEmail, accessToken);
-        res.send(`You logged in as ${validatedPrimaryEmail}`);
+        res.send(_getResponseHtml(`You logged in as ${validatedPrimaryEmail}`));
     },
-    onError: (message, res, next) => {
+    onError: (message, res) => {
         console.warn('oh no, login failed for reason: %s', message);
-        res.status(403).send('Login failed. Reason: ' + message);
+        res.status(403).send(_getResponseHtml('Login failed. Reason: ' + message));
     }
 });
 
@@ -37,7 +54,7 @@ app.get('/', function (req, res) {
               </html>`);
 });
 
-app.get('/login', function(req, res, next) {
+app.get('/login', function(req, res) {
     let query = url.parse(req.url, true).query,
         email = query.email || null;
 
