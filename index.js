@@ -75,11 +75,6 @@ function getPayloadFromStateIfVerified(state, signer) {
     return payload;
 }
 
-const DEFAULT_HEADERS = {
-    'User-Agent': 'node.js',
-    Accept: 'application/json'
-};
-
 /**
  * @param {URL} url - some Github url; must be https:
  * @param {?string} authToken
@@ -89,7 +84,13 @@ const DEFAULT_HEADERS = {
  * @private
  */
 function _fetchGithubJson(url, authToken, maxContentLength = 2000, timeout = 15000) {
-    const headers = authToken ? Object.assign(DEFAULT_HEADERS, {Authorization: `token ${authToken}`}) : DEFAULT_HEADERS;
+    let headers = {
+        'User-Agent': 'node.js',
+        Accept: 'application/json',
+    };
+    if (authToken) {
+        headers.Authorization = `token ${authToken}`;
+    }
 
     if (url.protocol !== 'https:') {
         return Promise.reject('Expected https url, but got ' + url.protocol);
