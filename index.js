@@ -84,10 +84,9 @@ function getPayloadFromStateIfVerified(state, signer) {
  * @private
  */
 function _fetchGithubJson(url, authToken, maxContentLength = 2000, timeout = 15000) {
-    let headers = {
-        'User-Agent': 'node.js',
-        Accept: 'application/json',
-    };
+    let headers = Object.create(null);
+    headers['User-Agent'] = 'node.js';
+    headers.Accept = 'application/json';
     if (authToken) {
         headers.Authorization = `token ${authToken}`;
     }
