@@ -10,7 +10,7 @@ Github account's _primary, verified_ email address, otherwise authentication fai
   
 ### Requirements
 * Node 14+
-* Express 4+
+* Express (or similar, it's up to you)
 * Your Github OAuth app providing Client ID and Client secret.  
   See: https://github.com/settings/developers
 
