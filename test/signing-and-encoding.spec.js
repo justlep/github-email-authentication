@@ -1,17 +1,19 @@
-'use strict';
-
-const assert = require('assert');
-const {encodeSafeBase64, decodeUrlSafeBase64, createSignedStateForPayload, getPayloadFromStateIfVerified} = require('..');
-const KeygripAutorotate = require('keygrip-autorotate');
+import assert from 'node:assert';
+import {encodeSafeBase64, decodeUrlSafeBase64, createSignedStateForPayload, getPayloadFromStateIfVerified} from '../index.js';
+import {KeygripAutorotate} from 'keygrip-autorotate';
 
 const BASE64_REGEX = /^[0-9a-z_-]+$/i;
 
 describe('github-email-authentication', () => {
 
+    /**
+     * @type {?KeygripAutorotate}
+     */
     let grip;
 
     afterEach(() => {
-        grip = void(!grip || grip.destroy());
+        grip?.destroy();
+        grip = null;
     });
 
     it('can encode+decode url-safe base64 strings', () => {

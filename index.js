@@ -1,8 +1,8 @@
-const assert = require('assert');
-const crypto = require('crypto');
-const {URL, URLSearchParams} = require('url');
-const https = require('https');
-const KeygripAutorotate = require('keygrip-autorotate');
+import assert from 'node:assert';
+import https from 'node:https';
+import crypto from 'node:crypto';
+import {URL, URLSearchParams} from 'node:url';
+import KeygripAutorotate from 'keygrip-autorotate';
 
 const STATE_RANDOM_BYTES = 5;
 const STATE_RANDOM_BYTES_STRING_LENGTH = STATE_RANDOM_BYTES * 2;
@@ -16,16 +16,19 @@ const ANY_EMAIL_PLACEHOLDER = '@' + crypto.randomBytes(10).toString('hex');
  * @param {string} s
  * @return {string}
  */
-function encodeSafeBase64(s) {
+export function encodeSafeBase64(s) {
     return Buffer.from(s, 'utf8').toString('base64').replace(/[/+=]/g, s => s === '/' ? '_' : s === '+' ? '-' : '');
 }
 
 /**
  * @param {string} s
- * @return {*|String}
+ * @return {?string}
  */
-function decodeUrlSafeBase64(s) {
-    return s && Buffer.from(s.replace(/[-_]/g, s => s === '-' ? '+' : s === '_' ? '/' : ''), 'base64').toString('utf8');
+export function decodeUrlSafeBase64(s) {
+    if (typeof s !== 'string') {
+        return null;
+    }
+    return Buffer.from(s.replace(/[-_]/g, s => s === '-' ? '+' : s === '_' ? '/' : ''), 'base64').toString('utf8');
 }
 
 /**
@@ -33,7 +36,7 @@ function decodeUrlSafeBase64(s) {
  * @param {KeygripAutorotate} signer
  * @return {string} a url-safe, signed state string that can be verified+decoded using {@link getPayloadFromStateIfVerified}
  */
-function createSignedStateForPayload(payload, signer) {
+export function createSignedStateForPayload(payload, signer) {
     let encodedPayload = encodeSafeBase64(payload || ''),
         randomPrefix = crypto.randomBytes(STATE_RANDOM_BYTES).toString('hex'),
         textToSign = encodedPayload.length.toString(36) + '_' + randomPrefix + encodedPayload;
@@ -45,9 +48,9 @@ function createSignedStateForPayload(payload, signer) {
  *
  * @param {string} state
  * @param {KeygripAutorotate} signer
- * @return {string|null} the payload from the signed state IF the state could be verified, otherwise null
+ * @return {?string} the payload from the signed state IF the state could be verified, otherwise null
  */
-function getPayloadFromStateIfVerified(state, signer) {
+export function getPayloadFromStateIfVerified(state, signer) {
     if (!state || typeof state !== 'string' || state.length < MIN_ACCEPTED_STATE_LENGTH || state.length > MAX_ACCEPTED_STATE_LENGTH) {
         return null;
     }
@@ -112,7 +115,7 @@ function _fetchGithubJson(url, authToken, maxContentLength = 2000, timeout = 150
 
             res.on('data', d => data += d);
 
-            res.on('end', () => {
+            res.once('end', () => {
                 let json,
                     parsingError;
                 try {
@@ -127,7 +130,7 @@ function _fetchGithubJson(url, authToken, maxContentLength = 2000, timeout = 150
                 }
             });
 
-        }).on('error', (e) => {
+        }).once('error', (e) => {
             // console.error(e);
             reject = reject && void reject(e);
         });
@@ -137,49 +140,45 @@ function _fetchGithubJson(url, authToken, maxContentLength = 2000, timeout = 150
 
 /**
  * @param {Object} opts
- * @param {Router|Express.Application} opts.appOrRouter - some Express app or router
+ * @param {Express|Router} opts.appOrRouter - some Express app or router
  * @param {string} opts.routableCallbackUri - e.g. '/githubCallback', this route will be added to the given `appOrRouter`
  *                                            to receive authorization codes
  * @param {string} opts.absoluteCallbackUrl - the absolute URL for the redirect from Github OAuth login, so basically
  *                                            the absolute URL for the `routableCallbackUri`.
- *                                            (!) Must equal the "Authorization callback URL" defined in the Github OAuth Apps setting.
+ *                                            (!) Must equal the "Authorization callback URL" defined in your OAuth App's settings on Github,
+ *                                                see https://github.com/settings/developers
  * @param {string} opts.githubClientId
  * @param {string} opts.githubClientSecret
- * @param {string} [opts.maxLoginProcessDuration] - the max. time in millis from initiating a login and the time
+ * @param {string[]} [opts.scopes] - scopes for the access token; defaults to {@link DEFAULT_SCOPES}
+ *                                   If given, the scopes must allow read-access to the user's Github email addresses ('user:email'),
+ *                                   otherwise login will fail.
+ * @param {boolean} [opts.exposeAccessToken=false] - if true, the access token will be passed to the `onSuccess` callback,
+ *                                                   otherwise {@code null} is passed as token (default: false)
+ * @param {number} [opts.maxLoginProcessDuration] - the max. time in millis from initiating a login and the time
  *                                                  an authorization token is passed to the `routableCallbackUri` callback.
  *                                                  Essentially the time users have to enter their Github credentials
  *                                                  and authorize the app to access their email addresses.
- * @param {string} [opts.scopes] - scopes for the access token; defaults to {@link DEFAULT_SCOPES]
- *                                If given, the scopes must allow read-access to the user's Github email addresses ('user:email'),
- *                                otherwise login will fail.
- * @param {GithubEmailAuthentication_ErrorHandler} opts.onError
+ *                                                  Technically, the time after which a `state` can no longer be verified since
+ *                                                  the secret used for signing it got rotated out. (default: 2 minutes).
+ *
  * @param {GithubEmailAuthentication_SuccessHandler} opts.onSuccess
- * @param {boolean} [opts.exposeAccessToken=false] - if true, the access token will be passed to the `onSuccess` callback,
- *                                                   otherwise {@code null} is passed as token (default)
- * @param {boolean} [opts.logEnabled=false]
+ * @param {GithubEmailAuthentication_ErrorHandler} opts.onError
+ * @param {boolean} [opts.logEnabled] - if true, errors/warning will be logged to the console (default: false).
+ *                                      (!) Logged messages may contain sensitive data like email addresses.
  *
  * @constructor
  */
-function GithubEmailAuthentication(opts) {
+export function GithubEmailAuthentication({appOrRouter, routableCallbackUri, absoluteCallbackUrl,
+                                           githubClientId, githubClientSecret, scopes = DEFAULT_SCOPES, exposeAccessToken = false,
+                                           maxLoginProcessDuration = DEFAULT_MAX_LOGIN_PROCESS_DURATION, onError, onSuccess, logEnabled}) {
+
     if (!this instanceof GithubEmailAuthentication) {
-        return new GithubEmailAuthentication(opts);
+        throw new Error('GithubEmailAuthentication is a constructor');
     }
 
-    const {
-        appOrRouter,
-        absoluteCallbackUrl,
-        githubClientId,
-        githubClientSecret,
-        onError,
-        onSuccess,
-        logEnabled,
-        scopes = DEFAULT_SCOPES,
-        exposeAccessToken = false,
-        maxLoginProcessDuration = DEFAULT_MAX_LOGIN_PROCESS_DURATION} = opts;
-
     assert(appOrRouter && typeof appOrRouter.get === 'function' && typeof appOrRouter.post === 'function',
-        'Given appOrRouter must be express-like');
-    assert(/^\/.+/.test(opts.routableCallbackUri), 'Invalid routableCallbackUri');
+           'Given appOrRouter must be express-like');
+    assert(/^\/[^/].+/.test(routableCallbackUri), 'Invalid routableCallbackUri');
     assert(/^https?:\/\/.+$/.test(absoluteCallbackUrl), 'Invalid callback uri for Github OAuth');
     assert(githubClientId && typeof githubClientId === 'string', 'Invalid client id');
     assert(githubClientSecret && typeof githubClientSecret === 'string', 'Invalid client secret');
@@ -235,7 +234,7 @@ function GithubEmailAuthentication(opts) {
      */
     this.destroy = () => signer.destroy();
 
-    appOrRouter.get(opts.routableCallbackUri, async (cbRequestFromGithub, res, next) => {
+    appOrRouter.get(routableCallbackUri, async (cbRequestFromGithub, res, next) => {
         /** @type {?string|undefined} */
         let code, state;
 
@@ -271,7 +270,7 @@ function GithubEmailAuthentication(opts) {
             apiUrl.searchParams.set('state', state);
             const resJson = await _fetchGithubJson(apiUrl, null);
 
-            accessToken = resJson && resJson['access_token'];
+            accessToken = resJson?.['access_token'];
 
         } catch (err) {
             logEnabled && console.error('Github API call for access token failed with error: %s', err);
@@ -291,9 +290,9 @@ function GithubEmailAuthentication(opts) {
              * @property {boolean} verified
              * @property {string} visibility
              */
-            const acceptableEmailObject = emailsArray && emailsArray.find(e => e.verified && e.primary);
+            const acceptableEmailObject = emailsArray?.find(e => e.verified && e.primary);
 
-            loggedInPrimaryVerifiedEmail = acceptableEmailObject && acceptableEmailObject.email;
+            loggedInPrimaryVerifiedEmail = acceptableEmailObject?.email;
 
         } catch (err) {
             logEnabled && console.warn('Failed to fetch Github email addresses: %s', err);
@@ -333,12 +332,3 @@ function GithubEmailAuthentication(opts) {
  * @param {Response} response
  * @param {function|NextFunction} [next]
  */
-
-
-module.exports = {
-    encodeSafeBase64,
-    decodeUrlSafeBase64,
-    createSignedStateForPayload,
-    getPayloadFromStateIfVerified,
-    GithubEmailAuthentication
-};

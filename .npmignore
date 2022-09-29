@@ -1,3 +1,7 @@
 .idea
 /test
 test-credentials.json
+.gitignore
+package-lock.json
+*.gz
+*.log

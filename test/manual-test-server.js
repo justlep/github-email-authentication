@@ -1,28 +1,32 @@
-const express = require('express');
-const url = require('url');
-const {resolve} = require('path');
-const app = express();
-const {writeFileSync} = require('fs');
-const {GithubEmailAuthentication} = require('..');
+import {writeFileSync, readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {fileURLToPath, parse as parseUrl} from 'node:url';
+import express from 'express';
+import {GithubEmailAuthentication} from '../index.js';
 
 const PORT = 9099;
+const CREDENTIALS_FILE_PATH = resolve(fileURLToPath(import.meta.url), '../test-credentials.json');
 
-const CREDENTIALS_FILE_PATH = resolve(__dirname, 'test-credentials.json');
-let credentials = {githubClientId: '', githubClientSecret: ''};
+const app = express();
+const credentials = {
+        githubClientId: '',
+        githubClientSecret: ''
+    };
 
 try {
-    credentials = require(CREDENTIALS_FILE_PATH);
+    Object.assign(credentials, JSON.parse(readFileSync(CREDENTIALS_FILE_PATH).toString()));
 } catch (err) {
     writeFileSync(CREDENTIALS_FILE_PATH, JSON.stringify(credentials, null, 2));
 }
 
 const {githubClientId, githubClientSecret} = credentials;
+
 if (!githubClientId || !githubClientSecret) {
     console.warn('Missing Github test credentials in %s', CREDENTIALS_FILE_PATH);
     process.exit(1);
 }
 
-const _getResponseHtml = s => `<html><body><p>${s}</p><a href="/">Go back</a></body></html>`;
+const _getResponseHtml = s => `<html lang="en"><body><p>${s}</p><a href="/">Go back</a></body></html>`;
 
 const githubEmailAuth = new GithubEmailAuthentication({
     appOrRouter: app,
@@ -37,13 +41,14 @@ const githubEmailAuth = new GithubEmailAuthentication({
     },
     onError: (message, res) => {
         console.warn('oh no, login failed for reason: %s', message);
-        res.status(403).send(_getResponseHtml('Login failed. Reason: ' + message));
-    }
+        res.status(401);
+        res.send(_getResponseHtml('Login failed. Reason: ' + message));
+    },
 });
 
 app.get('/', function (req, res) {
     res.set('Content-Type', 'text/html');
-    res.send(`<html>
+    res.send(`<html lang="en">
                 <body>
                   <p>Leave empty to login with *any* account, otherwise account's primary, verified email address:</p>
                   <form method="get" action="/login">
@@ -55,7 +60,7 @@ app.get('/', function (req, res) {
 });
 
 app.get('/login', function(req, res) {
-    let query = url.parse(req.url, true).query,
+    let query = parseUrl(req.url, true).query,
         email = query.email || null;
 
     if (email) {
