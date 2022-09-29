@@ -74,19 +74,19 @@ app.post('loginExistingCustomer', (req, res) => {
 Properties of the `opts` object for `new GithubEmailAuthentication(opts)`:
 
 
-| Param | Type | Default | Description |
-| --- | --- | --- | --- |
-| appOrRouter | <code>Express</code> or <code>Router</code> |  | some Express app or router |
-| routableCallbackUri | <code>string</code> |  | e.g. '/githubCallback', this route will be added to the given `appOrRouter` to receive authorization codes |
-| absoluteCallbackUrl | <code>string</code> |  | the absolute URL for the redirect from Github OAuth login, so basically the absolute URL for the `routableCallbackUri`. (!)  Must equal the "Authorization callback URL" defined in your OAuth App's settings on Github, see https://github.com/settings/developers.
-| githubClientId | <code>string</code> |  |  |
-| githubClientSecret | <code>string</code> |  |  |
-| [scopes] | <code>string[]</code> | <code>['user:email']</code> | scopes for the access token; If given, the scopes must allow read-access to the user's Github email addresses ('user:email'), otherwise login will fail. |
-| [exposeAccessToken] | <code>boolean</code> | <code>false</code> | if true, the access token will be passed to the `onSuccess` callback,  otherwise `null` is passed as token (default: false) |
-| [maxLoginProcessDuration] | <code>number</code> | 2 * 60 * 1000 | the max. time in millis from initiating a login and the time an authorization token is passed to the `routableCallbackUri` callback.  Essentially the time users have to enter their Github credentials and authorize the app to access their email addresses. Technically, the time after which a `state` can no longer be verified since the secret used for signing it got rotated out. (default: 2 minutes) |
-| onSuccess | [<code>GithubEmailAuthentication\_SuccessHandler</code>](#GithubEmailAuthentication_SuccessHandler) |  |  |
-| onError | [<code>GithubEmailAuthentication\_ErrorHandler</code>](#GithubEmailAuthentication_ErrorHandler) |  |  |
-| [logEnabled] | <code>boolean</code> | false | if true, errors/warning will be logged to the console (default: false).                                      (!) Logged messages may contain sensitive data like email addresses. |
+| Param | Type |  Description |
+| --- | --- | --- |
+| appOrRouter | <code>Express</code> \| <code>Router</code> | some Express app or router |
+| routableCallbackUri | <code>string</code> | e.g. '/githubCallback', this route will be added to the given `appOrRouter` to receive authorization codes |
+| absoluteCallbackUrl | <code>string</code> | the absolute URL for the redirect from Github OAuth login, so basically the absolute URL for the `routableCallbackUri`. (!)  Must equal the "Authorization callback URL" defined in your OAuth App's settings on Github, see https://github.com/settings/developers.
+| githubClientId | <code>string</code> |  |
+| githubClientSecret | <code>string</code> |  |
+| [scopes] | <code>string[]</code> | scopes for the access token (default: `['user:email']`); If given, the scopes must allow read-access to the user's Github email addresses ('user:email'), otherwise authentication will fail. |
+| [exposeAccessToken] | <code>boolean</code> | if true, the access token will be passed to the `onSuccess` callback,  otherwise `null` is passed as token (default: false) |
+| [maxLoginProcessDuration] | <code>number</code> | the max. time in millis from initiating a login and the time an authorization token is passed to the `routableCallbackUri` callback.  Essentially the time users have to enter their Github credentials and authorize the app to access their email addresses. Technically, the time after which a `state` can no longer be verified since the secret used for signing it got rotated out. (default: 2\*60\*1000, i.e. 2 minutes) |
+| onSuccess | function | see [<code>GithubEmailAuthentication\_SuccessHandler</code>](#GithubEmailAuthentication_SuccessHandler) |
+| onError | function | see [<code>GithubEmailAuthentication\_ErrorHandler</code>](#GithubEmailAuthentication_ErrorHandler) |
+| [logEnabled] | <code>boolean</code> | if true, errors/warning will be logged to the console (default: false).                                      (!) Logged messages may contain sensitive data like email addresses. |
 
 ### Notes
 
@@ -98,6 +98,7 @@ The default scope only allows read-access to Github accounts' email addresses.
 Add any scopes you want to use the access token for beyond authentication (requires `exposeAccessToken` set true).
 With custom scopes, make sure read-access to account email addresses remains possible, otherwise authentication will fail.
 
+<a name="GithubEmailAuthentication_ErrorHandler"></a>
 
 ### GithubEmailAuthentication\_ErrorHandler : <code>function</code>
 
