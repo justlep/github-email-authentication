@@ -1,8 +1,6 @@
 import assert from 'node:assert';
-import {encodeSafeBase64, decodeUrlSafeBase64, createSignedStateForPayload, getPayloadFromStateIfVerified} from '../index.js';
+import {createSignedStateForPayload, getPayloadFromStateIfVerified} from '../index.js';
 import {KeygripAutorotate} from 'keygrip-autorotate';
-
-const BASE64_REGEX = /^[0-9a-z_-]+$/i;
 
 describe('github-email-authentication', () => {
 
@@ -14,15 +12,6 @@ describe('github-email-authentication', () => {
     afterEach(() => {
         grip?.destroy();
         grip = null;
-    });
-
-    it('can encode+decode url-safe base64 strings', () => {
-        const TEXT = 'keine-spaß-blöd)"$/=)($§%?!"$?("_*_-und-12346-wei§9te!!!!r@nowhere-really-nowhere.nil-shit-💩';
-        const urlsafe = encodeSafeBase64(TEXT);
-
-        assert(BASE64_REGEX.test(urlsafe));
-        assert.equal(decodeUrlSafeBase64(urlsafe), TEXT, 'decoded url-safe text should equal original one');
-        // console.log('original:%s\nencoded: %s\ndecoded: %s', TEXT, urlsafe, decodeUrlSafeBase64(urlsafe));
     });
 
     it('can create signed states for a payload, and retrieve the payload back from a verified state', () => {

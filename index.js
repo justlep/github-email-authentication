@@ -1,35 +1,14 @@
 import assert from 'node:assert';
 import https from 'node:https';
-import crypto from 'node:crypto';
 import {URL, URLSearchParams} from 'node:url';
-import KeygripAutorotate from 'keygrip-autorotate';
+import {KeygripAutorotate, generateRandomBytes} from 'keygrip-autorotate';
 
-const STATE_RANDOM_BYTES = 5;
-const STATE_RANDOM_BYTES_STRING_LENGTH = STATE_RANDOM_BYTES * 2;
-const MIN_ACCEPTED_STATE_LENGTH = STATE_RANDOM_BYTES_STRING_LENGTH + 29;
-const MAX_ACCEPTED_STATE_LENGTH = 3500;
+const STATE_SALT_MIN_BYTES = 64;
+const STATE_SALT_MAX_BYTES = 128;
+const STATE_MIN_PLAUSIBLE_LENGTH = STATE_SALT_MIN_BYTES + 6; // just a rough number, base64 overhead and email payload not even included
 const DEFAULT_MAX_LOGIN_PROCESS_DURATION = 2 * 60 * 1000; // max. 2 minutes to enter credentials & hit Authorize
 const DEFAULT_SCOPES = ['user:email'];
-const ANY_EMAIL_PLACEHOLDER = '@' + crypto.randomBytes(10).toString('hex');
-
-/**
- * @param {string} s
- * @return {string}
- */
-export function encodeSafeBase64(s) {
-    return Buffer.from(s, 'utf8').toString('base64').replace(/[/+=]/g, s => s === '/' ? '_' : s === '+' ? '-' : '');
-}
-
-/**
- * @param {string} s
- * @return {?string}
- */
-export function decodeUrlSafeBase64(s) {
-    if (typeof s !== 'string') {
-        return null;
-    }
-    return Buffer.from(s.replace(/[-_]/g, s => s === '-' ? '+' : s === '_' ? '/' : ''), 'base64').toString('utf8');
-}
+const ANY_EMAIL_PLACEHOLDER = '@' + generateRandomBytes(10, 20).toString('base64url');
 
 /**
  * @param {string} payload - the plaintext value to put into the state
@@ -37,9 +16,10 @@ export function decodeUrlSafeBase64(s) {
  * @return {string} a url-safe, signed state string that can be verified+decoded using {@link getPayloadFromStateIfVerified}
  */
 export function createSignedStateForPayload(payload, signer) {
-    let encodedPayload = encodeSafeBase64(payload || ''),
-        randomPrefix = crypto.randomBytes(STATE_RANDOM_BYTES).toString('hex'),
-        textToSign = encodedPayload.length.toString(36) + '_' + randomPrefix + encodedPayload;
+    let encodedPayload = Buffer.from(payload || '').toString('base64url'),
+        encodedSalt = generateRandomBytes(STATE_SALT_MIN_BYTES, STATE_SALT_MAX_BYTES).toString('base64url'),
+        textToSign = encodedPayload.length.toString(36).padStart(3, '0') +
+                     encodedSalt.length.toString(36).padStart(3, '0') + encodedPayload + encodedSalt;
 
     return textToSign + signer.sign(textToSign);
 }
@@ -51,26 +31,21 @@ export function createSignedStateForPayload(payload, signer) {
  * @return {?string} the payload from the signed state IF the state could be verified, otherwise null
  */
 export function getPayloadFromStateIfVerified(state, signer) {
-    if (!state || typeof state !== 'string' || state.length < MIN_ACCEPTED_STATE_LENGTH || state.length > MAX_ACCEPTED_STATE_LENGTH) {
+    if (typeof state !== 'string' || state.length < STATE_MIN_PLAUSIBLE_LENGTH || state.length > 3500) {
         return null;
     }
     let payload = null;
     try {
-        let lengthDividerIndex = state.indexOf('_');
-        if (lengthDividerIndex > 3) {
-            // encoded payload length can never be 36^4+
-            return null;
-        }
-        let encodedPayloadLength = parseInt(state.substr(0, lengthDividerIndex), 36),
-            encodedPayload = state.substr(lengthDividerIndex + 1 + STATE_RANDOM_BYTES_STRING_LENGTH, encodedPayloadLength),
-            signedTextLength = lengthDividerIndex + 1 + STATE_RANDOM_BYTES_STRING_LENGTH + encodedPayloadLength,
-            signedText = state.substr(0, signedTextLength),
-            signature = state.substr(signedTextLength);
+        let encodedPayloadLength = parseInt(state.substring(0, 3), 36),
+            encodedSaltLength = parseInt(state.substring(3, 6), 36),
+            signedTextLength = 6 + encodedPayloadLength + encodedSaltLength,
+            encodedPayload = state.substring(6, 6 + encodedPayloadLength),
+            signedText = state.substring(0, signedTextLength),
+            signature = state.substring(signedTextLength);
 
         // assert.equal(signedText.length + signature.length, state.length);
-
         if (signer.verify(signedText, signature)) {
-            payload = decodeUrlSafeBase64(encodedPayload);
+            payload = Buffer.from(encodedPayload, 'base64url').toString('utf8');
         }
     } catch (err) {
         // nothing

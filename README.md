@@ -9,7 +9,7 @@ When authentication is started for a _known_ email address, that address is expe
 Github account's _primary, verified_ email address, otherwise authentication fails.
   
 ### Requirements
-* Node 14+
+* Node 16+
 * Express (or similar, it's up to you)
 * Your Github OAuth app providing Client ID and Client secret.  
   See: https://github.com/settings/developers
